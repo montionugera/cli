@@ -116,8 +116,5 @@ flowchart LR
 | Repo | Role |
 | --- | --- |
 | **priompt** | The server this CLI publishes to — full docs on versioning, auth, and the semantic diff live there |
+| **proto** | Where the gRPC stubs, semantic diff engine (`priomptproto/semdiff`), and validation rules (`priomptproto/validate`) come from — imported, not copied; this repo carries no copies of anything |
 | **python-sdk / js-sdk** | How agents *read* what you publish |
-
-The gRPC stubs, the semantic diff engine (`priomptproto/semdiff`), and the
-validation rules (`priomptproto/validate`) are all imported from the shared
-**proto** repo — this repo carries no copies of anything.
