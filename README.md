@@ -3,7 +3,7 @@
 **The writing desk for your prompts.** `promptctl` is the authoring CLI for
 [Priompt](https://github.com/) — it lets prompt writers work the way developers
 work on code: prompts are plain files in a git repo, every change is validated
-and committed, risky edits are flagged by a semantic diff *before* they ship,
+and committed, far-reaching edits are flagged by a semantic diff *before* they ship,
 and one command publishes to the Priompt server that your AI agents read from.
 
 ## The 30-second version
@@ -72,7 +72,7 @@ promptctl diff HEAD~1
 #   Signal 2 (point delta): 0.470
 #   Signal 3 up:   ±2=0.095 (boundary)
 #   Signal 3 down: ±2=0.153 ±4=0.153 (flat)
-#   => localized tweak                      ← safe. "structural" would mean review it.
+#   => localized tweak                      ← the edit stayed local. See below.
 
 # 4. ship it: git push + publish to the server in one step
 promptctl push -server prompts.internal:8443
@@ -97,6 +97,11 @@ flowchart LR
   catch by themselves: `{{name}}` (doubled braces are an escaped literal brace
   to a formatter, so the slot would never be filled in) and `{name` (an unclosed
   brace is just literal text). Both used to commit silently and fail at runtime.
+- **the verdict measures spread, not risk.** `localized tweak` means the edit's
+  meaning shift stayed local — not that it is harmless. Turning "offer a refund
+  when reasonable" into "never offer a refund" is a localized tweak and a policy
+  reversal at the same time. Use it to decide what to look at first, not what to
+  skip.
 - **diff** compares each changed `*.prompt` between a ref and the working tree
   using the `PRIOMPT_EMBED_*` model. With no model configured it falls back to
   an offline lexical embedder (word overlap, not meaning) — good enough to
