@@ -34,6 +34,10 @@ go-git — no external git binary needed. A prompt's URI is simply its file path
 `acme/support/agent.prompt` → `priompt://acme/support/agent`. Slots are read
 straight from the template's `{placeholders}` — nothing to declare by hand.
 
+Because the first path segment is the **org** — the unit of access control on
+the server — every prompt must live in at least one directory. A `.prompt` file
+at the repo root has no org to belong to and is rejected at commit.
+
 ## Install
 
 ```sh
@@ -89,6 +93,10 @@ flowchart LR
 ## Behavior notes
 
 - **commit / push validate first** — a malformed prompt blocks the whole commit.
+  "Malformed" includes the two placeholder typos that auto-derived slots cannot
+  catch by themselves: `{{name}}` (doubled braces are an escaped literal brace
+  to a formatter, so the slot would never be filled in) and `{name` (an unclosed
+  brace is just literal text). Both used to commit silently and fail at runtime.
 - **diff** compares each changed `*.prompt` between a ref and the working tree
   using the `PRIOMPT_EMBED_*` model. With no model configured it falls back to
   an offline lexical embedder (word overlap, not meaning) — good enough to
