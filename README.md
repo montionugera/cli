@@ -134,3 +134,7 @@ flowchart LR
 | **priompt** | The server this CLI publishes to — full docs on versioning, auth, and the semantic diff live there |
 | **proto** | Where the gRPC stubs, semantic diff engine (`github.com/priompt/proto/semdiff`), and validation rules (`github.com/priompt/proto/validate`) come from — imported, not copied; this repo carries no copies of anything |
 | **python-sdk / js-sdk** | How agents *read* what you publish |
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
