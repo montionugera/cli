@@ -49,7 +49,7 @@ go install github.com/priompt/cli/cmd/promptctl@latest   # Go 1.25+
 
 ```sh
 promptctl commit -m "msg"                     # validate every *.prompt, then commit changes
-promptctl diff [ref]                           # semantic diff vs ref (default HEAD)
+promptctl diff [-fail-on structural] [ref]     # semantic diff vs ref (default HEAD)
 promptctl log acme/support/agent.prompt        # version lineage of one prompt
 promptctl promote acme/x.prompt dev prod       # bring a prompt from branch dev onto prod
 promptctl push [-server host:port]             # validate, git push, then publish to the server
@@ -83,7 +83,7 @@ promptctl push -server prompts.internal:8443
 
 `promote` models dev → staging → prod as git branches: it copies a validated
 prompt from one branch onto another and commits it — a deliberate, recorded
-promotion instead of a copy-paste.
+promotion instead of a copy-paste. You stay on the branch you ran it from.
 
 ```mermaid
 flowchart LR
@@ -108,6 +108,11 @@ flowchart LR
   an offline lexical embedder (word overlap, not meaning) — good enough to
   catch big rewrites, but point it at a real embedding endpoint for real
   semantics.
+- **diff exits 0 whatever the verdicts** unless you gate it: `-fail-on` takes a
+  comma-separated list of verdicts (`new`, `structural`, `tweak`, `minor`) and
+  exits 1 after the full diff if any prompt has one of them —
+  `promptctl diff -fail-on structural origin/main` in CI. A prompt that doesn't
+  exist in the ref reads as `new` (not `structural`).
 - **push / pull** use go-git and do not read git's credential helper — set
   `PRIOMPT_GIT_TOKEN` for HTTPS remotes; SSH uses your ssh-agent.
 - `promptctl push -server …` git-pushes **and** publishes each prompt, so
@@ -134,3 +139,7 @@ flowchart LR
 | **priompt** | The server this CLI publishes to — full docs on versioning, auth, and the semantic diff live there |
 | **proto** | Where the gRPC stubs, semantic diff engine (`github.com/priompt/proto/semdiff`), and validation rules (`github.com/priompt/proto/validate`) come from — imported, not copied; this repo carries no copies of anything |
 | **python-sdk / js-sdk** | How agents *read* what you publish |
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
