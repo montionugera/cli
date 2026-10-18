@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -105,13 +106,12 @@ func diffCmd(args []string) {
 
 	changed := false
 	for _, p := range promptUnion(tree) {
-		old := blobContent(tree, p)
-		neu := diskContent(p)
-		if old == neu {
+		a, b, differs := changedLines(blobContent(tree, p), diskContent(p))
+		if !differs {
 			continue
 		}
 		changed = true
-		res, err := semdiff.Analyze(emb, splitLines(old), splitLines(neu))
+		res, err := semdiff.Analyze(emb, a, b)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -467,4 +467,12 @@ func firstLine(s string) string {
 
 func splitLines(s string) []string {
 	return strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+}
+
+// changedLines splits both versions into lines and reports whether they differ.
+// The comparison runs after splitLines normalises line endings, so a CRLF-only
+// difference (core.autocrlf on Windows) is not a change.
+func changedLines(old, neu string) (a, b []string, changed bool) {
+	a, b = splitLines(old), splitLines(neu)
+	return a, b, !slices.Equal(a, b)
 }
