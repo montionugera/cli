@@ -5,7 +5,7 @@
 // propagation diff* (git's text diff can't express it), and env promotion.
 //
 //	promptctl commit -m "msg"            validate every prompt, then commit all changes
-//	promptctl diff [ref]                 semantic propagation diff vs ref (default HEAD)
+//	promptctl diff [-fail-on v] [ref]     semantic propagation diff vs ref (default HEAD)
 //	promptctl log <file.prompt>          version lineage of one prompt
 //	promptctl promote <file> <from> <to> bring a prompt from branch <from> onto <to>
 //	promptctl push|pull                  validate (push) then sync with origin
@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -93,33 +94,94 @@ func commit(args []string) {
 }
 
 // diffCmd runs the semantic propagation diff for every *.prompt that differs
-// between ref (default HEAD) and the working tree.
+// between ref (default HEAD) and the working tree. It exits 0 whatever the
+// verdicts unless -fail-on names verdicts to gate on; then any prompt with one
+// of them makes it exit 1 (after printing the full diff).
 func diffCmd(args []string) {
+	fs := flag.NewFlagSet("diff", flag.ExitOnError)
+	failOn := fs.String("fail-on", "", "exit 1 if any prompt's verdict is one of these (comma-separated: new, structural, tweak, minor)")
+	fs.Parse(args)
 	ref := "HEAD"
-	if len(args) > 0 {
-		ref = args[0]
+	if fs.NArg() > 0 {
+		ref = fs.Arg(0)
+		fs.Parse(fs.Args()[1:]) // flags may also follow the ref
 	}
-	r := openRepo()
+	gate, err := parseFailOn(*failOn)
+	if err == nil && fs.NArg() > 0 {
+		err = fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\nusage: promptctl diff [-fail-on verdicts] [ref]\n", err)
+		os.Exit(2)
+	}
+
+	var gated []string
+	for _, v := range runDiff(openRepo(), ref, os.Stdout) {
+		if gate[v.verdict] {
+			gated = append(gated, fmt.Sprintf("%s (%s)", v.path, v.verdict))
+		}
+	}
+	if len(gated) > 0 {
+		log.Fatalf("diff: %d prompt(s) match -fail-on %s: %s", len(gated), *failOn, strings.Join(gated, ", "))
+	}
+}
+
+type fileVerdict struct{ path, verdict string }
+
+// runDiff prints the diff of every changed prompt to w and returns each one's
+// verdict: semdiff's worst hunk class, or "new" for a prompt absent from ref.
+func runDiff(r *git.Repository, ref string, w io.Writer) []fileVerdict {
 	tree := treeAt(r, ref)
 	emb := semdiff.EmbedderFromEnv()
 
-	changed := false
+	var out []fileVerdict
 	for _, p := range promptUnion(tree) {
 		old := blobContent(tree, p)
 		neu := diskContent(p)
 		if old == neu {
 			continue
 		}
-		changed = true
+		if _, err := tree.File(p); err != nil { // added since ref: nothing to diff against
+			fmt.Fprintf(w, "## %s\nnew prompt (not in %s)\n  => new\n\n", p, ref)
+			out = append(out, fileVerdict{p, "new"})
+			continue
+		}
 		res, err := semdiff.Analyze(emb, splitLines(old), splitLines(neu))
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("## %s\n%s\n", p, semdiff.Format(res))
+		fmt.Fprintf(w, "## %s\n%s\n", p, semdiff.Format(res))
+		out = append(out, fileVerdict{p, semdiff.Worst(res)})
 	}
-	if !changed {
-		fmt.Printf("no prompt changes vs %s\n", ref)
+	if len(out) == 0 {
+		fmt.Fprintf(w, "no prompt changes vs %s\n", ref)
 	}
+	return out
+}
+
+// verdictNames maps each -fail-on name to the verdict it gates.
+var verdictNames = map[string]string{
+	"new": "new", "structural": "structural",
+	"tweak": "localized tweak", "localized tweak": "localized tweak",
+	"minor": "minor edit", "minor edit": "minor edit",
+}
+
+// parseFailOn turns a comma-separated -fail-on value into the set of verdicts
+// that fail the diff. Empty means none (exit 0, the historical behavior).
+func parseFailOn(s string) (map[string]bool, error) {
+	set := map[string]bool{}
+	for _, name := range strings.Split(s, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		v, ok := verdictNames[name]
+		if !ok {
+			return nil, fmt.Errorf("-fail-on: unknown verdict %q (want new, structural, tweak, minor)", name)
+		}
+		set[v] = true
+	}
+	return set, nil
 }
 
 // logCmd prints a prompt's version lineage — every commit that touched it,
