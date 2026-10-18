@@ -143,7 +143,7 @@ func logCmd(args []string) {
 // promote brings one prompt from the `from` branch onto the `to` branch and
 // commits it there — the dev → staging → prod version promotion. A no-op (the
 // prompt already matches on `to`) reports "already up to date" instead of failing
-// on an empty commit.
+// on an empty commit. The branch (or commit) checked out before is restored after.
 // ponytail: assumes both branches exist and the tree is clean; go-git errors surface as-is.
 func promote(args []string) {
 	if len(args) != 3 {
@@ -165,20 +165,39 @@ func promote(args []string) {
 	}
 
 	wt := worktree(r)
+	head, err := r.Head()
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := wt.Checkout(&git.CheckoutOptions{Branch: plumbing.NewBranchReferenceName(to)}); err != nil {
 		log.Fatalf("checkout %s: %v", to, err)
 	}
-	if err := os.WriteFile(filepath.FromSlash(path), []byte(content), 0o644); err != nil {
-		log.Fatal(err)
+	h, err := commitFile(r, wt, path, content, fmt.Sprintf("promote %s: %s -> %s", path, from, to))
+
+	// Switch back to where the user was (their branch, or a detached commit),
+	// whether or not the commit landed.
+	back := &git.CheckoutOptions{Branch: head.Name()}
+	if !head.Name().IsBranch() {
+		back = &git.CheckoutOptions{Hash: head.Hash()}
 	}
-	if _, err := wt.Add(path); err != nil {
-		log.Fatal(err)
+	if berr := wt.Checkout(back); berr != nil {
+		log.Fatalf("checkout %s (to switch back from %s): %v", head.Name().Short(), to, berr)
 	}
-	h, err := wt.Commit(fmt.Sprintf("promote %s: %s -> %s", path, from, to), &git.CommitOptions{Author: author(r)})
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("promoted %s onto %s (%s)\n", path, to, h.String()[:12])
+}
+
+// commitFile writes content to path in the checked-out worktree and commits it.
+func commitFile(r *git.Repository, wt *git.Worktree, path, content, msg string) (plumbing.Hash, error) {
+	if err := os.WriteFile(filepath.FromSlash(path), []byte(content), 0o644); err != nil {
+		return plumbing.ZeroHash, err
+	}
+	if _, err := wt.Add(path); err != nil {
+		return plumbing.ZeroHash, err
+	}
+	return wt.Commit(msg, &git.CommitOptions{Author: author(r)})
 }
 
 // pushCmd validates, pushes to the git remote, and — if -server is given —
