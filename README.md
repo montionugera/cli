@@ -83,7 +83,7 @@ promptctl push -server prompts.internal:8443
 
 `promote` models dev → staging → prod as git branches: it copies a validated
 prompt from one branch onto another and commits it — a deliberate, recorded
-promotion instead of a copy-paste.
+promotion instead of a copy-paste. You stay on the branch you ran it from.
 
 ```mermaid
 flowchart LR
